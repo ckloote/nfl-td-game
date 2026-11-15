@@ -1,6 +1,5 @@
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -25,25 +24,21 @@ def require_admin(user: User = Depends(current_user)) -> User:
     return user
 
 
-def current_entry(user: User = Depends(current_user), db: Session = Depends(get_db)) -> Entry:
-    """The signed-in user's entry in the current season.
+def find_entry(db: Session, user: User) -> Entry | None:
+    return db.scalar(
+        select(Entry).where(Entry.user_id == user.id, Entry.season == settings.season)
+    )
 
-    TEMPORARY until M4: anyone who signs in gets an approved entry on first use. M4
-    replaces this with the invite link and the organizer's approval.
+
+def current_entry(user: User = Depends(current_user), db: Session = Depends(get_db)) -> Entry:
+    """The signed-in user's approved entry in the current season, or 403.
+
+    Entries come from the invite link (`POST /api/join/{token}`) and the organizer's
+    approval; nothing here creates one.
     """
-    query = select(Entry).where(Entry.user_id == user.id, Entry.season == settings.season)
-    entry = db.scalar(query)
-    if entry is None:
-        name = user.name or (user.email or "").split("@")[0] or f"Entrant {user.id}"
-        entry = Entry(user_id=user.id, season=settings.season, display_name=name[:64])
-        db.add(entry)
-        try:
-            db.commit()
-        except IntegrityError:  # two first requests at once
-            db.rollback()
-            entry = db.scalar(query)
-    if entry.status != "approved":
-        raise HTTPException(status_code=403, detail="Your entry is not approved")
+    entry = find_entry(db, user)
+    if entry is None or entry.status != "approved":
+        raise HTTPException(status_code=403, detail="You don't have an approved entry in the pool")
     return entry
 
 

@@ -11,6 +11,9 @@ from .auth import router as auth_router
 from .config import DEV_SESSION_SECRET, settings
 from .db import upgrade_db
 from .ingest import refresh_loop
+from .membership import admin as membership_admin_router
+from .membership import router as membership_router
+from .picks import admin as picks_admin_router
 from .picks import router as picks_router
 from .pool import admin as admin_router
 from .pool import router as pool_router
@@ -43,6 +46,9 @@ app.include_router(auth_router)
 app.include_router(pool_router)
 app.include_router(picks_router)
 app.include_router(standings_router)
+app.include_router(membership_router)
+app.include_router(membership_admin_router)
+app.include_router(picks_admin_router)
 app.include_router(admin_router)
 
 

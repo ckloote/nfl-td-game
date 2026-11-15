@@ -48,6 +48,15 @@ class Identity(Base):
 
 
 # --- Pool state ---------------------------------------------------------------
+class Season(Base):
+    """One season of the pool. Holds the invite link's secret."""
+
+    __tablename__ = "seasons"
+
+    year: Mapped[int] = mapped_column(primary_key=True)
+    invite_token: Mapped[str] = mapped_column(String(64), unique=True)
+
+
 class Entry(Base):
     """One person's participation in one season. An entry, not a user, owns picks."""
 

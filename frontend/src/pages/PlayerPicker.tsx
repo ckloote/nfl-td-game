@@ -18,10 +18,10 @@ const STATUS_LABEL: Record<string, string> = {
   EXE: "Exempt",
 };
 
-function unavailable(player: Player, week: number): string | null {
+function unavailable(player: Player, week: number, ignoreLocks: boolean): string | null {
   if (player.used_week !== null && player.used_week !== week) return `Used in week ${player.used_week}`;
   if (player.used_week === week) return "In another slot this week";
-  if (player.locked) return "Locked";
+  if (player.locked && !ignoreLocks) return "Locked";
   return null;
 }
 
@@ -30,14 +30,18 @@ export default function PlayerPicker({
   slot,
   current,
   onClose,
+  entryId,
 }: {
   week: number;
   slot: Slot;
   current: Pick | null;
   onClose: () => void;
+  /** Organizer mode: pick for this entrant, ignoring locks. */
+  entryId?: number;
 }) {
-  const players = usePlayers(week, slot);
-  const setPick = useSetPick(week, slot);
+  const players = usePlayers(week, slot, entryId);
+  const setPick = useSetPick(week, slot, entryId);
+  const ignoreLocks = entryId !== undefined;
   const [search, setSearch] = useState("");
   const [hideUnavailable, setHideUnavailable] = useState(true);
 
@@ -51,11 +55,11 @@ export default function PlayerPicker({
     const words = search.toLowerCase().split(/\s+/).filter(Boolean);
     return (players.data ?? []).filter((p) => {
       const isCurrent = p.player_id === current?.player_id;
-      if (hideUnavailable && !isCurrent && unavailable(p, week)) return false;
+      if (hideUnavailable && !isCurrent && unavailable(p, week, ignoreLocks)) return false;
       const text = `${p.name} ${p.team} ${p.opponent} ${p.position}`.toLowerCase();
       return words.every((word) => text.includes(word));
     });
-  }, [players.data, search, hideUnavailable, current, week]);
+  }, [players.data, search, hideUnavailable, current, week, ignoreLocks]);
 
   const choose = (player: Player) =>
     setPick.mutate(player.player_id, { onSuccess: onClose });
@@ -99,7 +103,7 @@ export default function PlayerPicker({
               checked={hideUnavailable}
               onChange={(event) => setHideUnavailable(event.target.checked)}
             />
-            Hide players I&apos;ve used or who have locked
+            {ignoreLocks ? "Hide players already used" : "Hide players I\u2019ve used or who have locked"}
           </label>
           {setPick.error && (
             <p role="alert" className="mt-3 rounded-md bg-red-50 p-2 text-sm text-red-700">
@@ -120,7 +124,7 @@ export default function PlayerPicker({
           )}
           {shown.map((player) => {
             const isCurrent = player.player_id === current?.player_id;
-            const reason = isCurrent ? null : unavailable(player, week);
+            const reason = isCurrent ? null : unavailable(player, week, ignoreLocks);
             const status = player.status ? STATUS_LABEL[player.status] : undefined;
             return (
               <li key={player.player_id}>

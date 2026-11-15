@@ -12,7 +12,14 @@ export type Week = {
   first_kickoff: string | null;
   last_kickoff: string | null;
 };
-export type Season = { season: number; now: string; current_week: number | null; weeks: Week[] };
+export type MyEntry = { entry_id: number; display_name: string; status: "pending" | "approved" | "removed" };
+export type Season = {
+  season: number;
+  now: string;
+  entry: MyEntry | null; // null: this user has not used an invite link
+  current_week: number | null;
+  weeks: Week[];
+};
 
 type Matchup = {
   player_id: string;
@@ -84,10 +91,15 @@ export function useSeason() {
   return useQuery({ queryKey: ["season"], queryFn: () => request<Season>("/api/season"), refetchInterval: POLL });
 }
 
-export function useWeekPicks(week: number | null) {
+// The pick hooks take an optional entryId: with it they act on that entrant through the
+// organizer's endpoints, which ignore locks.
+const scope = (entryId?: number) => (entryId ? `/api/admin/entries/${entryId}` : "/api");
+
+export function useWeekPicks(week: number | null, entryId?: number) {
   return useQuery({
-    queryKey: ["picks", "week", week],
-    queryFn: () => request<SlotState[]>(`/api/weeks/${week}/picks/me`),
+    queryKey: ["picks", "week", week, entryId ?? "me"],
+    queryFn: () =>
+      request<SlotState[]>(`${scope(entryId)}/weeks/${week}/picks${entryId ? "" : "/me"}`),
     enabled: week !== null,
     refetchInterval: POLL,
   });
@@ -122,10 +134,10 @@ export function useEntry(entryId: string | undefined) {
   });
 }
 
-export function usePlayers(week: number, slot: Slot) {
+export function usePlayers(week: number, slot: Slot, entryId?: number) {
   return useQuery({
-    queryKey: ["players", week, slot],
-    queryFn: () => request<Player[]>(`/api/weeks/${week}/players?slot=${slot}`),
+    queryKey: ["players", week, slot, entryId ?? "me"],
+    queryFn: () => request<Player[]>(`${scope(entryId)}/weeks/${week}/players?slot=${slot}`),
   });
 }
 
@@ -138,11 +150,11 @@ function useInvalidatePicks() {
     ]);
 }
 
-export function useSetPick(week: number, slot: Slot) {
+export function useSetPick(week: number, slot: Slot, entryId?: number) {
   const invalidate = useInvalidatePicks();
   return useMutation({
     mutationFn: (playerId: string) =>
-      request<Pick>(`/api/weeks/${week}/picks/${slot}`, {
+      request<Pick>(`${scope(entryId)}/weeks/${week}/picks/${slot}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ player_id: playerId }),
@@ -152,11 +164,98 @@ export function useSetPick(week: number, slot: Slot) {
   });
 }
 
-export function useClearPick(week: number, slot: Slot) {
+export function useClearPick(week: number, slot: Slot, entryId?: number) {
   const invalidate = useInvalidatePicks();
   return useMutation({
-    mutationFn: () => request<void>(`/api/weeks/${week}/picks/${slot}`, { method: "DELETE" }),
+    mutationFn: () =>
+      request<void>(`${scope(entryId)}/weeks/${week}/picks/${slot}`, { method: "DELETE" }),
     onSettled: invalidate,
+  });
+}
+
+// --- joining ---------------------------------------------------------------------
+export function useJoin(token: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (displayName: string) =>
+      request<MyEntry>(`/api/join/${encodeURIComponent(token)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name: displayName }),
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["season"] }),
+  });
+}
+
+// --- organizer -------------------------------------------------------------------
+export type AdminEntry = {
+  entry_id: number;
+  display_name: string;
+  status: MyEntry["status"];
+  email: string | null;
+  google_name: string | null;
+  created_at: string;
+  picks: number;
+};
+export type Feed = {
+  feed: string;
+  season: number;
+  attempted_at: string;
+  ok_at: string | null;
+  rows: number | null;
+  error: string | null;
+};
+
+export function useAdminEntries() {
+  return useQuery({
+    queryKey: ["admin", "entries"],
+    queryFn: () => request<AdminEntry[]>("/api/admin/entries"),
+    refetchInterval: POLL,
+  });
+}
+
+export function usePatchEntry() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, ...patch }: { entryId: number; status?: MyEntry["status"]; display_name?: string }) =>
+      request<AdminEntry>(`/api/admin/entries/${entryId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ["admin"] }),
+        client.invalidateQueries({ queryKey: ["picks"] }),
+        client.invalidateQueries({ queryKey: ["season"] }),
+      ]),
+  });
+}
+
+export function useInvite() {
+  return useQuery({ queryKey: ["admin", "invite"], queryFn: () => request<{ url: string }>("/api/admin/invite") });
+}
+
+export function useRotateInvite() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<{ url: string }>("/api/admin/invite/rotate", { method: "POST" }),
+    onSuccess: (invite) => client.setQueryData(["admin", "invite"], invite),
+  });
+}
+
+export function useFeeds() {
+  return useQuery({ queryKey: ["admin", "feeds"], queryFn: () => request<Feed[]>("/api/admin/feeds") });
+}
+
+export function useRefreshFeeds() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<Feed[]>("/api/admin/refresh", { method: "POST" }),
+    onSuccess: (feeds) => {
+      client.setQueryData(["admin", "feeds"], feeds);
+      return client.invalidateQueries({ queryKey: ["picks"] });
+    },
   });
 }
 

@@ -97,9 +97,17 @@ def _client(provider: str):
     return oauth.create_client(provider)
 
 
+def safe_next(path: str | None) -> str:
+    """A same-site path to return to after login; anything else becomes "/"."""
+    if path and path.startswith("/") and not path.startswith("//") and "\\" not in path:
+        return path
+    return "/"
+
+
 @router.get("/auth/{provider}/login")
-async def login(provider: str, request: Request):
+async def login(provider: str, request: Request, next: str | None = None):
     client = _client(provider)
+    request.session["next"] = safe_next(next)  # e.g. the invite link that sent them here
     redirect_uri = f"{settings.public_base_url}/api/auth/{provider}/callback"
     return await client.authorize_redirect(request, redirect_uri)
 
@@ -127,9 +135,10 @@ async def callback(provider: str, request: Request, db: Session = Depends(get_db
     )
     db.commit()
 
+    destination = safe_next(request.session.get("next"))
     request.session.clear()  # drop OAuth state; start a fresh session
     request.session["user_id"] = user.id
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(destination, status_code=303)
 
 
 @router.get("/me", response_model=UserOut)

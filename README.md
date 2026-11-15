@@ -4,8 +4,19 @@ A web app for running a season-long NFL touchdown pool: entrants sign in, submit
 app tracks locks, scoring and who everyone has used. The design, rules and milestones are in
 [`docs/DESIGN.md`](docs/DESIGN.md). Built so far: login, migrations, admin flag and the app shell
 (M0), NFL schedule and roster data (M1), submitting picks with locks and one-use enforced (M2),
-and touchdown scoring with standings and everyone's locked picks (M3). Invitations and the admin
-screen are still to come; for now anyone who signs in can pick.
+touchdown scoring with standings and everyone's locked picks (M3), and the invite link, approval
+and Admin screen (M4). Deployment (M5) is still to come.
+
+## Running a pool
+
+1. Put your Google address in `ADMIN_EMAILS` and sign in; the Admin tab appears.
+2. Copy the invite link from Admin and send it to the entrants. Open it yourself to play too.
+3. Each person who opens the link and signs in shows up under Entrants as waiting; approve them.
+4. Admin also lets you fix an entrant's pick after it has locked (logged under your name), and
+   shows when the NFL data last loaded.
+
+Every week's locked picks can be downloaded from the All picks page as a CSV in the layout the
+selector's `pool report import` reads.
 
 ## NFL data
 

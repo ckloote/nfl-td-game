@@ -88,6 +88,15 @@ export default function AllPicks() {
           </tbody>
         </table>
       </div>
+      <p className="mt-3 text-sm">
+        <a
+          href={`/api/export/week/${week}.csv`}
+          download
+          className="text-slate-600 underline underline-offset-2 hover:text-slate-900"
+        >
+          Download week {week} as CSV
+        </a>
+      </p>
       {picks.data?.entries.some((e) => e.pending > 0) && (
         <p className="mt-2 text-xs text-slate-500">* has picks that are locked but not yet scored.</p>
       )}

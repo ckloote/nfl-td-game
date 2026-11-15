@@ -47,15 +47,29 @@ def db():
 
 @pytest.fixture()
 def login(client, monkeypatch):
-    """Sign the test client in as the given email (Google is faked)."""
+    """Sign the test client in as the given email (Google is faked).
+
+    By default the user also gets an approved entry; pass entry=False for a newcomer.
+    """
     from app import auth
 
-    def _login(email: str = "ada@example.com"):
+    def _login(email: str = "ada@example.com", entry: bool = True):
         async def fake(request):
             return {"userinfo": {"sub": email, "email": email, "email_verified": True}}
 
         monkeypatch.setattr(auth.oauth.create_client("google"), "authorize_access_token", fake)
         assert client.get("/api/auth/google/callback?code=x&state=y").status_code == 303
+        if entry:
+            from sqlalchemy import select
+
+            from app.models import Entry, User
+
+            with SessionLocal() as session:
+                user = session.scalar(select(User).where(User.email == email))
+                if not session.scalar(select(Entry).where(Entry.user_id == user.id)):
+                    session.add(Entry(user_id=user.id, season=2026, status="approved",
+                                      display_name=email.split("@")[0]))
+                    session.commit()
 
     return _login
 

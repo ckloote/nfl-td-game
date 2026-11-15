@@ -12,8 +12,8 @@ from starlette.concurrency import run_in_threadpool
 from . import clock, ingest, rules
 from .config import settings
 from .db import get_db
-from .deps import current_entry, current_user, require_admin, require_csrf_header
-from .models import Entry, FeedStatus, Game, Pick, RosterWeek
+from .deps import current_entry, current_user, find_entry, require_admin, require_csrf_header
+from .models import Entry, FeedStatus, Game, Pick, RosterWeek, User
 
 router = APIRouter(prefix="/api", dependencies=[Depends(current_user)])
 
@@ -26,15 +26,26 @@ class WeekOut(BaseModel):
     last_kickoff: datetime | None
 
 
+class MyEntryOut(BaseModel):
+    entry_id: int
+    display_name: str
+    status: str  # pending / approved / removed
+
+
 class SeasonOut(BaseModel):
     season: int
     now: datetime
+    entry: MyEntryOut | None  # None: this user has not used an invite link
     current_week: int | None  # None until a schedule is loaded
     weeks: list[WeekOut]
 
 
 @router.get("/season", response_model=SeasonOut)
-def season(db: Session = Depends(get_db), now: datetime = Depends(clock.now)):
+def season(
+    db: Session = Depends(get_db),
+    now: datetime = Depends(clock.now),
+    user: User = Depends(current_user),
+):
     by_week: dict[int, list[Game]] = {}
     for game in db.scalars(select(Game).where(Game.season == settings.season)):
         by_week.setdefault(game.week, []).append(game)
@@ -52,8 +63,15 @@ def season(db: Session = Depends(get_db), now: datetime = Depends(clock.now)):
     return SeasonOut(
         season=settings.season,
         now=now,
+        entry=my_entry_out(find_entry(db, user)),
         current_week=rules.current_week(db, settings.season, now),
         weeks=out,
+    )
+
+
+def my_entry_out(entry: Entry | None) -> MyEntryOut | None:
+    return entry and MyEntryOut(
+        entry_id=entry.id, display_name=entry.display_name, status=entry.status
     )
 
 
@@ -113,14 +131,9 @@ def eligible_players(db: Session, season: int, week: int) -> list[tuple[RosterWe
     return [(p, games[p.team]) for p in roster_as_of(db, season, week) if p.team in games]
 
 
-@router.get("/weeks/{week}/players", response_model=list[PlayerOut])
-def players(
-    week: int,
-    slot: Literal["QB", "RB", "FLEX"],
-    db: Session = Depends(get_db),
-    now: datetime = Depends(clock.now),
-    entry: Entry = Depends(current_entry),
-):
+def players_for(
+    db: Session, entry: Entry, week: int, slot: str, now: datetime
+) -> list[PlayerOut]:
     """Everyone eligible for a slot whose team plays that week, by name."""
     used = dict(
         db.execute(select(Pick.player_id, Pick.week).where(Pick.entry_id == entry.id)).all()
@@ -147,6 +160,17 @@ def players(
             )
         )
     return sorted(out, key=lambda p: (p.name, p.player_id))
+
+
+@router.get("/weeks/{week}/players", response_model=list[PlayerOut])
+def players(
+    week: int,
+    slot: Literal["QB", "RB", "FLEX"],
+    db: Session = Depends(get_db),
+    now: datetime = Depends(clock.now),
+    entry: Entry = Depends(current_entry),
+):
+    return players_for(db, entry, week, slot, now)
 
 
 # --- admin ------------------------------------------------------------------

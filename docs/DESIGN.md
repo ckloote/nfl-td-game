@@ -28,7 +28,7 @@ Decisions already made with you:
 | 4 | Most TDs wins; ties at the top split | Competition ranks (1, 2, 2, 4) |
 | 5 | Each pick locks 1 hour before that player's kickoff, independently | Checked on the server at every write |
 | 6 | Weekly report of all picks and totals | Replaced by the standings and week pages |
-| 7 | A player in the wrong slot scores zero and is spent | Cannot happen through the UI (only eligible players are offered); stays possible for an admin-entered pick and is scored as zero |
+| 7 | A player in the wrong slot scores zero and is spent | Cannot happen: only eligible players are offered, and the organizer's override enforces position too. Recording a deliberately misplaced pick is not built |
 
 Derived behaviour:
 
@@ -106,7 +106,8 @@ second, unofficial source and is out of scope for v1 (open question 2).
 nflverse lists fullbacks as RB, so they are eligible as `RB`. Players the roster says have left
 a team (cut, retired, traded away) are not offered; injured-reserve and practice-squad players
 are, with their status shown.
-An admin-editable `position_overrides` table covers players the pool rules differently.
+Position overrides for players the pool rules differently are **not built**; they wait on open
+question 1.
 
 ## 4. Data model
 
@@ -115,13 +116,12 @@ an `ADMIN_EMAILS` setting, matched against the verified email at login.
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `seasons` | year, first_week, last_week, status, invite_token | One row is current. Arrives with M4; until then the season is the `SEASON` setting |
-| `entries` | user_id, season, display_name, status (`pending`/`approved`/`removed`) | Unique (user, season). An entry, not a user, owns picks. Until M4 adds the invite link and approval, anyone who signs in gets an approved entry |
+| `seasons` | year, invite_token | Holds the invite link's secret. Which season is current is the `SEASON` setting; its weeks come from the schedule |
+| `entries` | user_id, season, display_name, status (`pending`/`approved`/`removed`) | Unique (user, season). An entry, not a user, owns picks. Created `pending` by the invite link (an admin's own is approved at once); a removed entrant keeps their picks but leaves the standings and can be restored |
 | `picks` | entry_id, week, slot, player_id, player name/position/team as submitted, game_id, updated_at | Unique (entry, week, slot) and unique (entry, player) |
 | `pick_events` | entry_id, week, slot, old/new player, actor_user_id, at | Append-only; settles disputes about what was submitted when |
 | `games` | game_id, season, week, home, away, kickoff_utc, scores | From schedule |
 | `roster_weeks` | season, week, player_id (nflverse gsis), name, position, team, status | From weekly rosters. A week's player list is each team's latest roster at or before that week, because the feed skips a team on its bye |
-| `position_overrides` | season, player_id, slot | Admin |
 | `touchdown_credits` | game_id, play_id, player_id, kind, season | From play-by-play |
 | `game_results` | game_id, complete, reason, scores | From play-by-play |
 | `feed_status` | feed, season, attempted_at, ok_at, rows, error | Shown on the admin page |
@@ -135,7 +135,7 @@ All under `/api`, JSON, session cookie. Writes require the CSRF header.
 
 | Method and path | Who | Does |
 |---|---|---|
-| `POST /join/{token}` | signed in | Creates a pending entry |
+| `POST /join/{token}` | signed in | Creates a pending entry, with a chosen display name. Signing in from the invite link returns to it |
 | `GET /season` | entrant | Current season, current week, my entry status |
 | `GET /weeks/{w}/players?slot=` | entrant | Eligible players with opponent, kickoff, lock time, and whether I've used them |
 | `GET /weeks/{w}/picks/me` | entrant | My three slots, locked or open |
@@ -143,8 +143,8 @@ All under `/api`, JSON, session cookie. Writes require the CSRF header.
 | `GET /weeks/{w}/picks` | entrant | Everyone's **locked** picks for the week, with scores. An unlocked slot reads `hidden` whether or not it is filled; `empty` only once the week has locked |
 | `GET /standings` | entrant | Rank, total, weekly totals, provisional flag |
 | `GET /entries/{id}` | entrant | One entrant's season grid and used players (locked picks only) |
-| `GET /export/week/{w}.csv` | entrant | `week,entrant,QB,RB,FLEX`, the layout the selector's `pool report import` already reads |
-| `/admin/*` | admin | Approve or remove entries, rotate invite link, set a pick on someone's behalf, position overrides, refresh now, feed status |
+| `GET /export/week/{w}.csv` | entrant | `week,entrant,QB,RB,FLEX`, the layout the selector's `pool report import` already reads. Locked picks only, so it is a complete report once the week has locked |
+| `/admin/*` | admin | Approve, remove, restore or rename entries; show and replace the invite link; set or clear a pick on someone's behalf; refresh now; feed status |
 
 Two rules are enforced in the server, never only in the UI:
 
@@ -166,8 +166,8 @@ Two rules are enforced in the server, never only in the UI:
    is pending.
 5. **Week view** — every entrant's locked picks for a week; unlocked slots show as hidden.
 6. **Entrant page** — another entrant's grid and used players.
-7. **Admin** — pending approvals, invite link, feed status and refresh, pick override, position
-   overrides.
+7. **Admin** — entrants and pending approvals, invite link, pick override, feed status and
+   refresh.
 
 Times are shown in the viewer's local timezone. Mobile layout first; most picks will be made on
 a phone.
@@ -180,7 +180,7 @@ a phone.
 | **M1** NFL data ✔ | Schedule and roster ingest, refresh job, players endpoint | 2026 schedule and rosters load; players list for a 2026 week is right |
 | **M2** Picks ✔ | Submit, change, clear; lock and one-use enforcement; pick log; This week and My season screens | Lock and one-use tests pass against a moved clock |
 | **M3** Scoring and standings ✔ | Ported scoring, play-by-play ingest, standings, week view, entrant page, visibility filter | A 2026 week scores identically to the selector for the same picks |
-| **M4** Membership and admin | Invite link, approval, admin page, CSV export | A second Google account can join, be approved, and pick |
+| **M4** Membership and admin ✔ | Invite link, approval, admin page, CSV export | A second Google account can join, be approved, and pick |
 | **M5** Deploy and dry run | Single-origin deployment per README §3, backups, 2026 replay with real entrants' picks | Standings match the organizer's 2026 reports |
 
 ## 8. Verification
