@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from "react-router";
 import { useAuth } from "./auth";
 import Layout from "./Layout";
+import MySeason from "./pages/MySeason";
 import Placeholder from "./pages/Placeholder";
 import SignIn from "./pages/SignIn";
+import ThisWeek from "./pages/ThisWeek";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -12,8 +14,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Placeholder title="This week" milestone="M2 (picks)" />} />
-        <Route path="season" element={<Placeholder title="My season" milestone="M2 (picks)" />} />
+        <Route index element={<ThisWeek />} />
+        <Route path="season" element={<MySeason />} />
         <Route
           path="standings"
           element={<Placeholder title="Standings" milestone="M3 (scoring and standings)" />}

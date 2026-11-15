@@ -35,6 +35,8 @@ Derived behaviour:
 - **A slot can be changed freely until it locks.** Changing means: the current pick's lock has
   not passed *and* the new player's lock has not passed. Clearing a slot frees the player.
 - **A missed slot is a no-pick:** zero TDs, nobody spent.
+- **Any future week can be picked ahead of time.** A player held in a later week counts as used
+  until that slot is cleared.
 - **Only players whose team plays that week can be picked.** A game with no confirmed kickoff
   time is pickable and has no lock until the time is published.
 - **A pick on a player who then doesn't play scores zero** once his game is final, and he is spent.
@@ -110,8 +112,8 @@ an `ADMIN_EMAILS` setting, matched against the verified email at login.
 | Table | Key columns | Notes |
 |---|---|---|
 | `seasons` | year, first_week, last_week, status, invite_token | One row is current. Arrives with M4; until then the season is the `SEASON` setting |
-| `entries` | user_id, season, display_name, status (`pending`/`approved`/`removed`) | Unique (user, season). An entry, not a user, owns picks |
-| `picks` | entry_id, week, slot, player_id, game_id, updated_at | Unique (entry, week, slot) and unique (entry, player) |
+| `entries` | user_id, season, display_name, status (`pending`/`approved`/`removed`) | Unique (user, season). An entry, not a user, owns picks. Until M4 adds the invite link and approval, anyone who signs in gets an approved entry |
+| `picks` | entry_id, week, slot, player_id, player name/position/team as submitted, game_id, updated_at | Unique (entry, week, slot) and unique (entry, player) |
 | `pick_events` | entry_id, week, slot, old/new player, actor_user_id, at | Append-only; settles disputes about what was submitted when |
 | `games` | game_id, season, week, home, away, kickoff_utc, scores | From schedule |
 | `roster_weeks` | season, week, player_id (nflverse gsis), name, position, team, status | From weekly rosters. A week's player list is each team's latest roster at or before that week, because the feed skips a team on its bye |
@@ -171,7 +173,7 @@ a phone.
 |---|---|---|
 | **M0** Foundations ✔ | Alembic, `is_admin`, clock dependency, router and app shell | Existing auth tests pass on migrated schema |
 | **M1** NFL data ✔ | Schedule and roster ingest, refresh job, players endpoint | 2026 schedule and rosters load; players list for a 2026 week is right |
-| **M2** Picks | Submit, change, clear; lock and one-use enforcement; pick log; This week and My season screens | Lock and one-use tests pass against a moved clock |
+| **M2** Picks ✔ | Submit, change, clear; lock and one-use enforcement; pick log; This week and My season screens | Lock and one-use tests pass against a moved clock |
 | **M3** Scoring and standings | Ported scoring, play-by-play ingest, standings, week view, entrant page, visibility filter | A 2026 week scores identically to the selector for the same picks |
 | **M4** Membership and admin | Invite link, approval, admin page, CSV export | A second Google account can join, be approved, and pick |
 | **M5** Deploy and dry run | Single-origin deployment per README §3, backups, 2026 replay with real entrants' picks | Standings match the organizer's 2026 reports |

@@ -3,7 +3,8 @@
 A web app for running a season-long NFL touchdown pool: entrants sign in, submit picks, and the
 app tracks locks, scoring and who everyone has used. The design, rules and milestones are in
 [`docs/DESIGN.md`](docs/DESIGN.md). Built so far: login, migrations, admin flag and the app shell
-(M0), and NFL schedule and roster data with the pickable-players endpoint (M1).
+(M0), NFL schedule and roster data (M1), and submitting picks with locks and one-use enforced
+(M2). Scoring, standings and invitations are still to come; for now anyone who signs in can pick.
 
 ## NFL data
 

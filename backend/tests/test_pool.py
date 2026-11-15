@@ -1,41 +1,9 @@
-from datetime import datetime, timezone
-
 import pytest
 
 from app import ingest
-from app.models import Game, RosterWeek
+from app.models import RosterWeek
 
-UTC = timezone.utc
 CSRF = {"X-Requested-With": "fetch"}
-
-
-@pytest.fixture()
-def season(db):
-    """Two weeks. Week 1: NE@SEA Thursday, BUF@MIA Sunday (KC on a bye). Week 2: time TBD."""
-    db.add_all([
-        Game(game_id="w1_thu", season=2026, week=1, home_team="SEA", away_team="NE",
-             gameday="2026-09-10", kickoff=datetime(2026, 9, 11, 0, 20, tzinfo=UTC)),
-        Game(game_id="w1_sun", season=2026, week=1, home_team="MIA", away_team="BUF",
-             gameday="2026-09-13", kickoff=datetime(2026, 9, 13, 17, 0, tzinfo=UTC)),
-        Game(game_id="w2_tbd", season=2026, week=2, home_team="KC", away_team="SEA",
-             gameday="2026-09-20", kickoff=None),
-        Game(game_id="old", season=2025, week=1, home_team="KC", away_team="SEA",
-             gameday="2025-09-07", kickoff=datetime(2025, 9, 7, 17, 0, tzinfo=UTC)),
-    ])
-
-    def player(week, pid, name, pos, team, status="ACT"):
-        return RosterWeek(season=2026, week=week, player_id=pid, name=name, position=pos,
-                          team=team, status=status)
-
-    db.add_all([
-        player(1, "q1", "Sam Seattle", "QB", "SEA"),
-        player(1, "q2", "Bo Buffalo", "QB", "BUF", "RES"),
-        player(1, "q3", "Kip Kansas", "QB", "KC"),
-        player(1, "r1", "Ned England", "RB", "NE"),
-        player(1, "w1", "Mia Wideout", "WR", "MIA"),
-        player(1, "t1", "Al Tightend", "TE", "SEA"),
-    ])
-    db.commit()
 
 
 def test_endpoints_need_a_signed_in_user(client, season):

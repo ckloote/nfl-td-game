@@ -12,8 +12,8 @@ from starlette.concurrency import run_in_threadpool
 from . import clock, ingest, rules
 from .config import settings
 from .db import get_db
-from .deps import current_user, require_admin, require_csrf_header
-from .models import FeedStatus, Game, RosterWeek
+from .deps import current_entry, current_user, require_admin, require_csrf_header
+from .models import Entry, FeedStatus, Game, Pick, RosterWeek
 
 router = APIRouter(prefix="/api", dependencies=[Depends(current_user)])
 
@@ -70,6 +70,7 @@ class PlayerOut(BaseModel):
     kickoff: datetime | None
     lock_at: datetime | None
     locked: bool
+    used_week: int | None  # the week I already have this player in, if any
 
 
 def week_games(db: Session, season: int, week: int) -> dict[str, Game]:
@@ -106,19 +107,27 @@ def roster_as_of(db: Session, season: int, week: int) -> list[RosterWeek]:
     return list({row.player_id: row for row in rows}.values())
 
 
+def eligible_players(db: Session, season: int, week: int) -> list[tuple[RosterWeek, Game]]:
+    """Every rostered player whose team plays that week, with his game."""
+    games = week_games(db, season, week)
+    return [(p, games[p.team]) for p in roster_as_of(db, season, week) if p.team in games]
+
+
 @router.get("/weeks/{week}/players", response_model=list[PlayerOut])
 def players(
     week: int,
     slot: Literal["QB", "RB", "FLEX"],
     db: Session = Depends(get_db),
     now: datetime = Depends(clock.now),
+    entry: Entry = Depends(current_entry),
 ):
     """Everyone eligible for a slot whose team plays that week, by name."""
-    games = week_games(db, settings.season, week)
+    used = dict(
+        db.execute(select(Pick.player_id, Pick.week).where(Pick.entry_id == entry.id)).all()
+    )
     out = []
-    for p in roster_as_of(db, settings.season, week):
-        game = games.get(p.team)
-        if game is None or p.position not in rules.SLOTS[slot]:
+    for p, game in eligible_players(db, settings.season, week):
+        if p.position not in rules.SLOTS[slot]:
             continue
         home = game.home_team == p.team
         out.append(
@@ -134,6 +143,7 @@ def players(
                 kickoff=game.kickoff,
                 lock_at=rules.lock_at(game),
                 locked=rules.is_locked(game, now),
+                used_week=used.get(p.player_id),
             )
         )
     return sorted(out, key=lambda p: (p.name, p.player_id))

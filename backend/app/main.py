@@ -11,6 +11,7 @@ from .auth import router as auth_router
 from .config import DEV_SESSION_SECRET, settings
 from .db import upgrade_db
 from .ingest import refresh_loop
+from .picks import router as picks_router
 from .pool import admin as admin_router
 from .pool import router as pool_router
 
@@ -39,6 +40,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(pool_router)
+app.include_router(picks_router)
 app.include_router(admin_router)
 
 

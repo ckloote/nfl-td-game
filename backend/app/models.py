@@ -47,6 +47,64 @@ class Identity(Base):
     user: Mapped[User] = relationship(back_populates="identities")
 
 
+# --- Pool state ---------------------------------------------------------------
+class Entry(Base):
+    """One person's participation in one season. An entry, not a user, owns picks."""
+
+    __tablename__ = "entries"
+    __table_args__ = (UniqueConstraint("user_id", "season"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    season: Mapped[int]
+    display_name: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="approved")  # pending/approved/removed
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class Pick(Base):
+    """The player an entry has in one slot of one week.
+
+    The two unique constraints are the rules: one pick per slot per week, and a player
+    at most once per season (an entry belongs to exactly one season). Name, position and
+    team are copied at submission so a pick still reads correctly after rosters change.
+    """
+
+    __tablename__ = "picks"
+    __table_args__ = (
+        UniqueConstraint("entry_id", "week", "slot"),
+        UniqueConstraint("entry_id", "player_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entry_id: Mapped[int] = mapped_column(ForeignKey("entries.id"), index=True)
+    week: Mapped[int]
+    slot: Mapped[str] = mapped_column(String(8))
+    player_id: Mapped[str] = mapped_column(String(16))
+    player_name: Mapped[str] = mapped_column(String(128))
+    position: Mapped[str] = mapped_column(String(8))
+    team: Mapped[str] = mapped_column(String(8))
+    game_id: Mapped[str] = mapped_column(ForeignKey("games.game_id"))
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+    game: Mapped["Game"] = relationship()
+
+
+class PickEvent(Base):
+    """Append-only log of every change to a slot: who, when, from whom, to whom."""
+
+    __tablename__ = "pick_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entry_id: Mapped[int] = mapped_column(ForeignKey("entries.id"), index=True)
+    week: Mapped[int]
+    slot: Mapped[str] = mapped_column(String(8))
+    old_player_id: Mapped[str | None] = mapped_column(String(16))
+    new_player_id: Mapped[str | None] = mapped_column(String(16))  # None = slot cleared
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
 # --- NFL data (replaced wholesale by app/ingest.py; never edited by hand) -----
 class Game(Base):
     """One regular-season game from the nflverse schedule."""
