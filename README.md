@@ -98,8 +98,8 @@ scopes unless you truly need them.
 ```bash
 # Backend (terminal 1)
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
+uv venv .venv && source .venv/bin/activate
+uv pip install -r requirements-dev.txt
 cp .env.example .env        # then fill in GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / ADMIN_EMAILS
 uvicorn app.main:app --reload --port 8000
 
@@ -112,8 +112,11 @@ npm run dev                 # http://localhost:5173
 Open **http://localhost:5173** (not :8000). Vite proxies `/api` to the backend so the browser sees a
 single origin; that keeps cookies first-party and avoids CORS.
 
-If `python -m venv` fails for lack of `ensurepip`, use `uv venv .venv && uv pip install -r
-requirements-dev.txt` instead.
+The Python environment is managed with [uv](https://docs.astral.sh/uv/). The `python`, `pytest`
+and `alembic` commands in this README assume `backend/.venv` is activated; without activating,
+prefix them with `uv run` from `backend/` (for example `uv run pytest`). After
+`requirements.txt` or `requirements-dev.txt` changes, run `uv pip install -r
+requirements-dev.txt` again. Plain `python -m venv` and `pip` work too if you don't have uv.
 
 `ADMIN_EMAILS` lists the Google addresses that become admins when they sign in. Admins can
 make other signed-in users admins, or stop them being one, under Organizers on the Admin screen. `DEV_NOW`
