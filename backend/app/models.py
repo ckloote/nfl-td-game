@@ -139,6 +139,35 @@ class RosterWeek(Base):
     status: Mapped[str | None] = mapped_column(String(8))
 
 
+class TouchdownCredit(Base):
+    """One touchdown credited to one player: as its scorer, or as its passer."""
+
+    __tablename__ = "touchdown_credits"
+    __table_args__ = (Index("ix_touchdown_credits_season", "season"),)
+
+    game_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    play_id: Mapped[int] = mapped_column(primary_key=True)
+    player_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8), primary_key=True)  # scoring / throwing
+    season: Mapped[int]
+    player_name: Mapped[str | None] = mapped_column(String(128))
+    team: Mapped[str | None] = mapped_column(String(8))
+
+
+class GameResult(Base):
+    """Whether a game's play-by-play is complete enough to score picks from."""
+
+    __tablename__ = "game_results"
+
+    game_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    season: Mapped[int] = mapped_column(index=True)
+    complete: Mapped[bool]
+    reason: Mapped[str] = mapped_column(String(255))
+    # Final score according to the play-by-play, compared with the schedule's on read.
+    home_score: Mapped[int | None]
+    away_score: Mapped[int | None]
+
+
 class FeedStatus(Base):
     """Outcome of the latest attempt to refresh one feed for one season."""
 

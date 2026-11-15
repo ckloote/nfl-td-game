@@ -75,7 +75,7 @@ SQLAlchemy ── SQLite (WAL)          refresh job (in-process, timed)
 |---|---|---|
 | Schedule | Weeks, kickoff times (stored UTC), final scores | Hourly in season |
 | Rosters | Player list, team, position | Daily |
-| Play-by-play | Touchdown credits, game completeness | Hourly on game days, daily otherwise |
+| Play-by-play | Touchdown credits, game completeness | Hourly while a game from the last four days has no trusted final, daily otherwise |
 
 A failed download keeps the previous data, as in the selector's `ingest.refresh`.
 
@@ -87,8 +87,12 @@ the research code. Instead copy the logic of two small pieces, with their tests:
   plays excluded. A game is **complete** only with an end-of-game marker, terminal scores equal
   to the schedule, and every TD identity resolved.
 - `results.score_pick` (`../nfl-player-selector/src/pool/results.py`): a complete game with no
-  credits is a real **0**; an incomplete or missing feed is **pending**, never zero; a pick with
-  no game is zero once the whole week is final.
+  credits is a real **0**; an incomplete or missing feed is **pending**, never zero.
+
+A pick is scored from the game the player has credits in that week when there is one (he may
+have changed teams after the pick was made), otherwise from the game he was picked in. The
+selector's "pick with no game" case cannot arise here, because only players with a game can be
+picked.
 
 **Scores are not stored.** They are computed on read from `touchdown_credits` and `game_results`,
 so an upstream stat correction appears after the next refresh. Totals show as provisional while
@@ -118,7 +122,7 @@ an `ADMIN_EMAILS` setting, matched against the verified email at login.
 | `games` | game_id, season, week, home, away, kickoff_utc, scores | From schedule |
 | `roster_weeks` | season, week, player_id (nflverse gsis), name, position, team, status | From weekly rosters. A week's player list is each team's latest roster at or before that week, because the feed skips a team on its bye |
 | `position_overrides` | season, player_id, slot | Admin |
-| `touchdown_credits` | game_id, play_id, player_id, kind | From play-by-play |
+| `touchdown_credits` | game_id, play_id, player_id, kind, season | From play-by-play |
 | `game_results` | game_id, complete, reason, scores | From play-by-play |
 | `feed_status` | feed, season, attempted_at, ok_at, rows, error | Shown on the admin page |
 
@@ -136,7 +140,7 @@ All under `/api`, JSON, session cookie. Writes require the CSRF header.
 | `GET /weeks/{w}/players?slot=` | entrant | Eligible players with opponent, kickoff, lock time, and whether I've used them |
 | `GET /weeks/{w}/picks/me` | entrant | My three slots, locked or open |
 | `PUT /weeks/{w}/picks/{slot}` | entrant | Set or change a pick; `DELETE` clears it |
-| `GET /weeks/{w}/picks` | entrant | Everyone's **locked** picks for the week, with scores |
+| `GET /weeks/{w}/picks` | entrant | Everyone's **locked** picks for the week, with scores. An unlocked slot reads `hidden` whether or not it is filled; `empty` only once the week has locked |
 | `GET /standings` | entrant | Rank, total, weekly totals, provisional flag |
 | `GET /entries/{id}` | entrant | One entrant's season grid and used players (locked picks only) |
 | `GET /export/week/{w}.csv` | entrant | `week,entrant,QB,RB,FLEX`, the layout the selector's `pool report import` already reads |
@@ -147,7 +151,8 @@ Two rules are enforced in the server, never only in the UI:
 - **Lock:** `PUT`/`DELETE` are refused when either the existing or the new player's lock has
   passed. Admin writes bypass this and are recorded in `pick_events` with the admin as actor.
 - **Visibility:** any response containing another entrant's pick filters to `lock time ≤ now`.
-  This includes used-player lists and the CSV export.
+  This includes used-player lists and the CSV export. Standings count only locked picks, so an
+  entrant's total and players-used never reveal a pick that could still change.
 
 ## 6. Screens
 
@@ -174,7 +179,7 @@ a phone.
 | **M0** Foundations ✔ | Alembic, `is_admin`, clock dependency, router and app shell | Existing auth tests pass on migrated schema |
 | **M1** NFL data ✔ | Schedule and roster ingest, refresh job, players endpoint | 2026 schedule and rosters load; players list for a 2026 week is right |
 | **M2** Picks ✔ | Submit, change, clear; lock and one-use enforcement; pick log; This week and My season screens | Lock and one-use tests pass against a moved clock |
-| **M3** Scoring and standings | Ported scoring, play-by-play ingest, standings, week view, entrant page, visibility filter | A 2026 week scores identically to the selector for the same picks |
+| **M3** Scoring and standings ✔ | Ported scoring, play-by-play ingest, standings, week view, entrant page, visibility filter | A 2026 week scores identically to the selector for the same picks |
 | **M4** Membership and admin | Invite link, approval, admin page, CSV export | A second Google account can join, be approved, and pick |
 | **M5** Deploy and dry run | Single-origin deployment per README §3, backups, 2026 replay with real entrants' picks | Standings match the organizer's 2026 reports |
 

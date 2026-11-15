@@ -22,9 +22,10 @@ import polars as pl
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
+from . import scoring
 from .config import settings
 from .db import SessionLocal, upgrade_db
-from .models import FeedStatus, Game, RosterWeek
+from .models import FeedStatus, Game, GameResult, RosterWeek, TouchdownCredit
 from .rules import GONE_STATUSES, SLOTS
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,14 @@ log = logging.getLogger(__name__)
 EASTERN = ZoneInfo("America/New_York")  # nflverse gameday/gametime are US Eastern
 POSITIONS = {p for positions in SLOTS.values() for p in positions}
 # How stale a feed may get before the timer reloads it, and how soon to retry a failure.
-MAX_AGE = {"schedule": timedelta(hours=1), "rosters": timedelta(hours=24)}
+MAX_AGE = {
+    "schedule": timedelta(hours=1),
+    "rosters": timedelta(hours=24),
+    "touchdowns": timedelta(hours=24),
+}
+# Touchdowns are reloaded this often while a recent game is still waiting for its final.
+TOUCHDOWNS_AWAITING = timedelta(hours=1)
+RECENT_GAME = timedelta(days=4)
 RETRY_AFTER = timedelta(minutes=10)
 CHECK_EVERY_SECONDS = 300
 
@@ -139,6 +147,14 @@ def load_rosters(season: int) -> list[dict]:
     return transform_rosters(raw, season)
 
 
+def load_touchdowns(season: int) -> list[dict]:
+    raw = download(f"pbp/play_by_play_{season}")
+    if raw is None:
+        raise FileNotFoundError(f"{season} play-by-play is not published yet")
+    wanted = scoring.PBP_REQUIRED | scoring.PBP_OPTIONAL
+    return raw.select([c for c in raw.columns if c in wanted]).to_dicts()
+
+
 def write_schedule(db: Session, season: int, rows: list[dict]) -> None:
     # Upsert rather than replace: picks will point at games.
     keep = {r["game_id"] for r in rows}
@@ -154,8 +170,33 @@ def write_rosters(db: Session, season: int, rows: list[dict]) -> None:
     db.execute(insert(RosterWeek), rows)
 
 
-FEEDS: dict[str, tuple[Callable[[int], list[dict]], Callable[[Session, int, list[dict]], None]]]
-FEEDS = {"schedule": (load_schedule, write_schedule), "rosters": (load_rosters, write_rosters)}
+def write_touchdowns(db: Session, season: int, plays: list[dict]) -> int:
+    """Replace the season's credits and results; a game no longer in the feed goes pending."""
+    schedule = {
+        g.game_id: (g.home_score, g.away_score)
+        for g in db.scalars(select(Game).where(Game.season == season))
+    }
+    if not schedule:
+        raise ValueError(f"no {season} schedule loaded; touchdowns need it first")
+    credits, results = scoring.transform_touchdowns(plays, schedule)
+    if not results:
+        raise ValueError("play-by-play has no matching regular-season games")
+    db.execute(delete(TouchdownCredit).where(TouchdownCredit.season == season))
+    db.execute(delete(GameResult).where(GameResult.season == season))
+    if credits:
+        db.execute(insert(TouchdownCredit), [c | {"season": season} for c in credits])
+    db.execute(insert(GameResult), [r | {"season": season} for r in results])
+    return len(credits)
+
+
+# feed -> (load from the network, write to the database). Order matters: touchdowns are
+# checked against the schedule's final scores, so the schedule loads first.
+FEEDS: dict[str, tuple[Callable[[int], list[dict]], Callable[[Session, int, list[dict]], int | None]]]
+FEEDS = {
+    "schedule": (load_schedule, write_schedule),
+    "rosters": (load_rosters, write_rosters),
+    "touchdowns": (load_touchdowns, write_touchdowns),
+}
 
 
 # --- refresh ----------------------------------------------------------------
@@ -173,9 +214,9 @@ def refresh_feed(db: Session, feed: str, season: int) -> FeedStatus:
         data = load(season)
         if not data:
             raise ValueError("feed returned no rows")
-        write(db, season, data)
+        written = write(db, season, data)
         db.flush()
-        rows = len(data)
+        rows = len(data) if written is None else written
     except Exception as exc:
         db.rollback()
         error = f"{type(exc).__name__}: {exc}"
@@ -190,12 +231,26 @@ def refresh_feed(db: Session, feed: str, season: int) -> FeedStatus:
     return status
 
 
-def is_due(status: FeedStatus | None, feed: str, now: datetime) -> bool:
+def awaiting_finals(db: Session, season: int, now: datetime) -> bool:
+    """True while a game that kicked off in the last few days has no trusted final."""
+    recent = db.scalars(
+        select(Game.game_id).where(
+            Game.season == season, Game.kickoff <= now, Game.kickoff >= now - RECENT_GAME
+        )
+    ).all()
+    pending = scoring.load_board(db, season).pending
+    return any(game_id in pending for game_id in recent)
+
+
+def is_due(
+    status: FeedStatus | None, feed: str, now: datetime, *, awaiting: bool = False
+) -> bool:
     if status is None:
         return True
     if status.error:
         return now - status.attempted_at >= RETRY_AFTER
-    return status.ok_at is None or now - status.ok_at >= MAX_AGE[feed]
+    max_age = TOUCHDOWNS_AWAITING if feed == "touchdowns" and awaiting else MAX_AGE[feed]
+    return status.ok_at is None or now - status.ok_at >= max_age
 
 
 def refresh(season: int, *, only_due: bool = False) -> list[FeedStatus]:
@@ -209,7 +264,9 @@ def refresh(season: int, *, only_due: bool = False) -> list[FeedStatus]:
             try:
                 for feed in FEEDS:
                     status = db.get(FeedStatus, (feed, season))
-                    if not only_due or is_due(status, feed, _utcnow()):
+                    now = _utcnow()
+                    awaiting = feed == "touchdowns" and awaiting_finals(db, season, now)
+                    if not only_due or is_due(status, feed, now, awaiting=awaiting):
                         refresh_feed(db, feed, season)
             finally:
                 _refreshing.release()
@@ -229,7 +286,7 @@ async def refresh_loop() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Load NFL schedule and rosters.")
+    parser = argparse.ArgumentParser(description="Load NFL schedule, rosters and touchdowns.")
     parser.add_argument("--season", type=int, default=settings.season)
     args = parser.parse_args()
     upgrade_db()

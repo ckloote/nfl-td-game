@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from . import clock, rules
+from . import clock, rules, scoring
 from .config import settings
 from .db import get_db
 from .deps import current_entry, current_user, require_csrf_header
@@ -33,6 +33,10 @@ class PickOut(BaseModel):
     kickoff: datetime | None
     lock_at: datetime | None
     locked: bool
+    # Touchdowns once the game is final. A locked pick with tds None is still pending,
+    # and `pending` says why; an unlocked pick has neither.
+    tds: int | None
+    pending: str | None
 
 
 class SlotOut(BaseModel):
@@ -46,9 +50,11 @@ class PickIn(BaseModel):
     player_id: str
 
 
-def pick_out(pick: Pick, now: datetime) -> PickOut:
+def pick_out(pick: Pick, now: datetime, board: scoring.Board | None = None) -> PickOut:
     game = pick.game
     home = game.home_team == pick.team
+    locked = rules.is_locked(game, now)
+    tds, pending = scoring.score_pick(board, pick) if board and locked else (None, None)
     return PickOut(
         week=pick.week,
         slot=pick.slot,
@@ -61,7 +67,9 @@ def pick_out(pick: Pick, now: datetime) -> PickOut:
         game_id=game.game_id,
         kickoff=game.kickoff,
         lock_at=rules.lock_at(game),
-        locked=rules.is_locked(game, now),
+        locked=locked,
+        tds=tds,
+        pending=pending,
     )
 
 
@@ -82,8 +90,9 @@ def my_picks(
     entry: Entry = Depends(current_entry),
 ):
     """All my picks this season, by week."""
+    board = scoring.load_board(db, settings.season)
     picks = db.scalars(select(Pick).where(Pick.entry_id == entry.id).order_by(Pick.week, Pick.id))
-    return [pick_out(p, now) for p in picks]
+    return [pick_out(p, now, board) for p in picks]
 
 
 @router.get("/weeks/{week}/picks/me", response_model=list[SlotOut])
@@ -96,10 +105,13 @@ def my_week(
     """My three slots for a week, filled or not."""
     games = set(week_games(db, settings.season, week).values())
     any_open = any(not rules.is_locked(g, now) for g in games)
+    board = scoring.load_board(db, settings.season)
     out = []
     for slot in rules.SLOTS:
         pick = slot_pick(db, entry, week, slot)
-        out.append(SlotOut(slot=slot, pick=pick_out(pick, now) if pick else None, open=any_open))
+        out.append(
+            SlotOut(slot=slot, pick=pick_out(pick, now, board) if pick else None, open=any_open)
+        )
     return out
 
 

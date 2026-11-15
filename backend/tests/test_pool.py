@@ -100,7 +100,7 @@ def test_admin_refresh(client, login, monkeypatch, season):
     assert client.get("/api/admin/feeds").json() == []
     assert client.post("/api/admin/refresh").status_code == 403  # CSRF header required
     feeds = client.post("/api/admin/refresh", headers=CSRF).json()
-    assert [f["feed"] for f in feeds] == ["rosters", "schedule"]
+    assert [f["feed"] for f in feeds] == ["rosters", "schedule", "touchdowns"]
     assert all("not published" in f["error"] and f["ok_at"] is None for f in feeds)
     assert client.get("/api/admin/feeds").json() == feeds
     # The failed refresh left the seeded schedule alone.

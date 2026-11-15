@@ -46,6 +46,9 @@ export default function Layout() {
           <NavLink to="/standings" className={tab}>
             Standings
           </NavLink>
+          <NavLink to="/picks" className={tab}>
+            All picks
+          </NavLink>
           {user.is_admin && (
             <NavLink to="/admin" className={tab}>
               Admin

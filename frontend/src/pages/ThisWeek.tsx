@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import {
   formatWhen,
   matchup,
+  scoreText,
   SLOT_LABEL,
   useClearPick,
   useSeason,
@@ -24,9 +25,16 @@ function SlotCard({ week, state }: { week: number; state: SlotState }) {
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           {SLOT_LABEL[state.slot]}
         </span>
-        {locked && (
-          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs font-medium text-white">Locked</span>
-        )}
+        <span className="flex items-center gap-2">
+          {pick && scoreText(pick) && (
+            <span className={pick.tds === null ? "text-sm text-slate-500" : "text-sm font-semibold text-slate-900"}>
+              {scoreText(pick)}
+            </span>
+          )}
+          {locked && (
+            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs font-medium text-white">Locked</span>
+          )}
+        </span>
       </div>
 
       {pick ? (
