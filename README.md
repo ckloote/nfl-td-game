@@ -2,8 +2,21 @@
 
 A web app for running a season-long NFL touchdown pool: entrants sign in, submit picks, and the
 app tracks locks, scoring and who everyone has used. The design, rules and milestones are in
-[`docs/DESIGN.md`](docs/DESIGN.md). So far the repo holds the foundations (milestone M0): login,
-migrations, admin flag and the app shell.
+[`docs/DESIGN.md`](docs/DESIGN.md). Built so far: login, migrations, admin flag and the app shell
+(M0), and NFL schedule and roster data with the pickable-players endpoint (M1).
+
+## NFL data
+
+The schedule and weekly rosters come from [nflverse](https://github.com/nflverse). While the
+server runs it reloads them on a timer (schedule hourly, rosters daily); an admin can force a
+reload with `POST /api/admin/refresh` and see the outcome at `GET /api/admin/feeds`. A feed that
+fails keeps the data it had. To load by hand, from `backend/`:
+
+```bash
+python -m app.ingest
+```
+
+Set `SEASON` for the season being played and `REFRESH_ENABLED=false` to turn the timer off.
 
 ## Login: "Sign in with Google"
 

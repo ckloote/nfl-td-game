@@ -97,6 +97,9 @@ locks are live; TD counts appear some hours after a game ends. Live in-game scor
 second, unofficial source and is out of scope for v1 (open question 2).
 
 **Slot eligibility** comes from the roster position: QB → `QB`; RB → `RB`; WR, TE → `FLEX`.
+nflverse lists fullbacks as RB, so they are eligible as `RB`. Players the roster says have left
+a team (cut, retired, traded away) are not offered; injured-reserve and practice-squad players
+are, with their status shown.
 An admin-editable `position_overrides` table covers players the pool rules differently.
 
 ## 4. Data model
@@ -106,16 +109,16 @@ an `ADMIN_EMAILS` setting, matched against the verified email at login.
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `seasons` | year, first_week, last_week, status, invite_token | One row is current |
+| `seasons` | year, first_week, last_week, status, invite_token | One row is current. Arrives with M4; until then the season is the `SEASON` setting |
 | `entries` | user_id, season, display_name, status (`pending`/`approved`/`removed`) | Unique (user, season). An entry, not a user, owns picks |
 | `picks` | entry_id, week, slot, player_id, game_id, updated_at | Unique (entry, week, slot) and unique (entry, player) |
 | `pick_events` | entry_id, week, slot, old/new player, actor_user_id, at | Append-only; settles disputes about what was submitted when |
 | `games` | game_id, season, week, home, away, kickoff_utc, scores | From schedule |
-| `players` | player_id (nflverse gsis), name, position, team, season | From rosters |
+| `roster_weeks` | season, week, player_id (nflverse gsis), name, position, team, status | From weekly rosters. A week's player list is each team's latest roster at or before that week, because the feed skips a team on its bye |
 | `position_overrides` | season, player_id, slot | Admin |
 | `touchdown_credits` | game_id, play_id, player_id, kind | From play-by-play |
 | `game_results` | game_id, complete, reason, scores | From play-by-play |
-| `feed_status` | feed, last_ok, last_error | Shown on the admin page |
+| `feed_status` | feed, season, attempted_at, ok_at, rows, error | Shown on the admin page |
 
 A pick's lock time is not stored: it is `games.kickoff_utc − 60 min` for the player's game that
 week, read at request time, so a rescheduled game moves the lock with it.
@@ -166,8 +169,8 @@ a phone.
 
 | | Delivers | Done when |
 |---|---|---|
-| **M0** Foundations | Alembic, `is_admin`, clock dependency, router and app shell | Existing auth tests pass on migrated schema |
-| **M1** NFL data | Schedule and roster ingest, refresh job, players endpoint | 2026 schedule and rosters load; players list for a 2026 week is right |
+| **M0** Foundations ✔ | Alembic, `is_admin`, clock dependency, router and app shell | Existing auth tests pass on migrated schema |
+| **M1** NFL data ✔ | Schedule and roster ingest, refresh job, players endpoint | 2026 schedule and rosters load; players list for a 2026 week is right |
 | **M2** Picks | Submit, change, clear; lock and one-use enforcement; pick log; This week and My season screens | Lock and one-use tests pass against a moved clock |
 | **M3** Scoring and standings | Ported scoring, play-by-play ingest, standings, week view, entrant page, visibility filter | A 2026 week scores identically to the selector for the same picks |
 | **M4** Membership and admin | Invite link, approval, admin page, CSV export | A second Google account can join, be approved, and pick |
@@ -189,8 +192,9 @@ a phone.
 
 None of these block M0–M2.
 
-1. **Fullbacks and odd positions.** Is a FB eligible as `RB`? Is anyone ruled differently from
-   his listed position? Default: FB counts as RB; everything else by override.
+1. **Odd positions.** Is anyone ruled differently from his listed position? Default: the
+   roster position decides, with overrides for exceptions. (Fullbacks need no ruling: the data
+   lists them as RB.)
 2. **Live scoring.** Is next-morning scoring acceptable for 2027, or is in-game scoring wanted?
 3. **Reminders.** Email or push before a lock needs a sending service; left out of v1.
 4. **Hosting.** Where this runs (a small VPS with a reverse proxy is assumed) and the domain.

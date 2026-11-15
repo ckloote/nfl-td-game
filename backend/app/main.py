@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,6 +10,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import router as auth_router
 from .config import DEV_SESSION_SECRET, settings
 from .db import upgrade_db
+from .ingest import refresh_loop
+from .pool import admin as admin_router
+from .pool import router as pool_router
 
 if settings.cookie_secure and settings.session_secret == DEV_SESSION_SECRET:
     raise RuntimeError("Set a real SESSION_SECRET when COOKIE_SECURE is enabled.")
@@ -17,7 +21,10 @@ if settings.cookie_secure and settings.session_secret == DEV_SESSION_SECRET:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     upgrade_db()
+    refresher = asyncio.create_task(refresh_loop()) if settings.refresh_enabled else None
     yield
+    if refresher:
+        refresher.cancel()
 
 
 app = FastAPI(title="NFL TD pool", lifespan=lifespan)
@@ -31,6 +38,8 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(pool_router)
+app.include_router(admin_router)
 
 
 @app.get("/api/healthz")

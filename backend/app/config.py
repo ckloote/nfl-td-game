@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     database_url: str = "sqlite:///./app.db"
     static_dir: str | None = None
+    # The NFL season the pool is playing.
+    season: int = 2026
+    # Download NFL data on a timer while the server runs. Off in tests.
+    refresh_enabled: bool = True
     # Comma-separated verified emails that become admins when they sign in.
     admin_emails: str = ""
     # Development only: freeze the app's clock at this ISO time (UTC if no offset),

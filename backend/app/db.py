@@ -1,10 +1,12 @@
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, event
+from sqlalchemy import DateTime, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.types import TypeDecorator
 
 from .config import settings
 
@@ -26,6 +28,28 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 class Base(DeclarativeBase):
     pass
+
+
+class UTCDateTime(TypeDecorator):
+    """A timezone-aware UTC datetime on every backend.
+
+    SQLite stores datetimes as naive text and hands them back naive, which would make
+    every lock comparison against an aware "now" raise. Naive values are refused on the
+    way in rather than guessed at.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("naive datetime; pass an aware one")
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    def process_result_value(self, value: datetime | None, dialect):
+        return None if value is None else value.replace(tzinfo=timezone.utc)
 
 
 def get_db() -> Iterator[Session]:
