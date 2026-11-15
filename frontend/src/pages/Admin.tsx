@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   formatWhen,
   useAdminEntries,
+  useAdminUsers,
   useBackup,
   useBackupNow,
   useFeeds,
@@ -10,6 +11,7 @@ import {
   useRefreshFeeds,
   useRotateInvite,
   useSeason,
+  useSetAdmin,
   useWeekPicks,
   type AdminEntry,
 } from "../pool";
@@ -223,6 +225,62 @@ function Feeds() {
   );
 }
 
+function Organizers() {
+  const users = useAdminUsers();
+  const setAdmin = useSetAdmin();
+  const error = users.error ?? setAdmin.error;
+
+  return (
+    <section className={card}>
+      <h2 className="font-semibold text-slate-900">Organizers</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Admins can do everything on this page. Someone has to sign in once before they appear here.
+      </p>
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error.message}</p>}
+      <ul className="mt-2 divide-y divide-slate-100">
+        {users.data?.map((user) => (
+          <li key={user.user_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <div className="min-w-0">
+              <p className="font-medium text-slate-900">
+                {user.name ?? user.email ?? "Unnamed"}
+                {user.is_me && <span className="font-normal text-slate-500"> (you)</span>}
+                {user.is_admin && (
+                  <span className="ml-2 rounded bg-slate-800 px-1.5 py-0.5 text-xs font-medium text-white">
+                    Admin
+                  </span>
+                )}
+              </p>
+              <p className="truncate text-xs text-slate-500">{user.email ?? "no email"}</p>
+            </div>
+            {!user.is_admin ? (
+              <button
+                className={button}
+                disabled={setAdmin.isPending}
+                onClick={() => setAdmin.mutate({ userId: user.user_id, isAdmin: true })}
+              >
+                Make admin
+              </button>
+            ) : user.is_me ? null : user.from_settings ? (
+              <span className="text-xs text-slate-500">Set in ADMIN_EMAILS</span>
+            ) : (
+              <button
+                className={button}
+                disabled={setAdmin.isPending}
+                onClick={() => {
+                  if (window.confirm(`Remove admin access from ${user.name ?? user.email}?`))
+                    setAdmin.mutate({ userId: user.user_id, isAdmin: false });
+                }}
+              >
+                Remove admin
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function Backups() {
   const backup = useBackup();
   const run = useBackupNow();
@@ -271,6 +329,7 @@ export default function Admin() {
       <Entrants />
       <Invite />
       <EditPicks />
+      <Organizers />
       <Feeds />
       <Backups />
     </div>

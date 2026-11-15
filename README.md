@@ -9,7 +9,8 @@ and Admin screen (M4). M5 so far: the 2026 replay, the container image and night
 
 ## Running a pool
 
-1. Put your Google address in `ADMIN_EMAILS` and sign in; the Admin tab appears.
+1. Put your Google address in `ADMIN_EMAILS` and sign in; the Admin tab appears. To add another
+   organizer, have them sign in once, then choose "Make admin" under Organizers.
 2. Copy the invite link from Admin and send it to the entrants. Open it yourself to play too.
 3. Each person who opens the link and signs in shows up under Entrants as waiting; approve them.
 4. Admin also lets you fix an entrant's pick after it has locked (logged under your name), and
@@ -114,7 +115,8 @@ single origin; that keeps cookies first-party and avoids CORS.
 If `python -m venv` fails for lack of `ensurepip`, use `uv venv .venv && uv pip install -r
 requirements-dev.txt` instead.
 
-`ADMIN_EMAILS` lists the Google addresses that become admins when they sign in. `DEV_NOW`
+`ADMIN_EMAILS` lists the Google addresses that become admins when they sign in. Admins can
+make other signed-in users admins, or stop them being one, under Organizers on the Admin screen. `DEV_NOW`
 freezes the app's clock to replay a past week (development only).
 
 Tests: `cd backend && pytest` (Google is mocked; no network or credentials needed).

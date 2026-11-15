@@ -160,6 +160,62 @@ def update_entry(entry_id: int, body: EntryPatch, db: Session = Depends(get_db))
     return admin_entry_out(db, entry)
 
 
+# --- who the organizers are -------------------------------------------------
+class AdminUserOut(BaseModel):
+    user_id: int
+    email: str | None
+    name: str | None
+    is_admin: bool
+    is_me: bool
+    # Listed in ADMIN_EMAILS: made an admin again at every sign-in, so not revocable here.
+    from_settings: bool
+
+
+class UserPatch(BaseModel):
+    is_admin: bool
+
+
+def admin_user_out(user: User, me: User) -> AdminUserOut:
+    return AdminUserOut(
+        user_id=user.id, email=user.email, name=user.name, is_admin=user.is_admin,
+        is_me=user.id == me.id,
+        from_settings=bool(user.email) and user.email.lower() in settings.admin_email_set,
+    )
+
+
+@admin.get("/users", response_model=list[AdminUserOut])
+def users(db: Session = Depends(get_db), me: User = Depends(current_user)):
+    """Everyone who has signed in, admins first."""
+    rows = db.scalars(select(User)).all()
+    rows = sorted(rows, key=lambda u: (not u.is_admin, (u.name or u.email or "").lower(), u.id))
+    return [admin_user_out(u, me) for u in rows]
+
+
+@admin.patch("/users/{user_id}", response_model=AdminUserOut, dependencies=WRITE)
+def update_user(
+    user_id: int, body: UserPatch, db: Session = Depends(get_db), me: User = Depends(current_user)
+):
+    """Make someone an admin, or stop them being one.
+
+    Nobody can revoke themselves, so there is always an admin left. An address in
+    ADMIN_EMAILS can't be revoked here: it would become an admin again at next sign-in.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Unknown user")
+    if not body.is_admin:
+        if user.id == me.id:
+            raise HTTPException(status_code=409, detail="You can't remove your own admin access")
+        if user.email and user.email.lower() in settings.admin_email_set:
+            raise HTTPException(
+                status_code=409,
+                detail="That address is in ADMIN_EMAILS; remove it there first",
+            )
+    user.is_admin = body.is_admin
+    db.commit()
+    return admin_user_out(user, me)
+
+
 # --- weekly export ----------------------------------------------------------
 @router.get("/export/week/{week}.csv")
 def export_week(

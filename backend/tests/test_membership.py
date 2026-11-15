@@ -211,3 +211,43 @@ def test_week_export_lists_locked_picks_in_the_selectors_layout(client, login, s
     assert client.get("/api/export/week/9.csv").status_code == 404
     login("zed@example.com", entry=False)
     assert client.get("/api/export/week/1.csv").status_code == 403
+
+
+# --- organizers --------------------------------------------------------------
+def test_an_admin_can_grant_and_revoke_admin(client, login):
+    login("ada@example.com")
+    login("grace@example.com")
+    assert client.get("/api/admin/users").status_code == 403
+    assert client.patch("/api/admin/users/1", json={"is_admin": True}, headers=CSRF).status_code == 403
+
+    login("boss@example.com", entry=False)
+    people = {u["email"]: u for u in client.get("/api/admin/users").json()}
+    assert [u["email"] for u in client.get("/api/admin/users").json()][0] == "boss@example.com"
+    assert people["boss@example.com"] | {"user_id": 0, "name": None} == {
+        "user_id": 0, "email": "boss@example.com", "name": None, "is_admin": True, "is_me": True,
+        "from_settings": True,
+    }
+    ada = people["ada@example.com"]["user_id"]
+    assert client.patch(f"/api/admin/users/{ada}", json={"is_admin": True}).status_code == 403  # CSRF
+    granted = client.patch(f"/api/admin/users/{ada}", json={"is_admin": True}, headers=CSRF)
+    assert granted.status_code == 200 and granted.json()["is_admin"] is True
+    assert client.patch("/api/admin/users/999", json={"is_admin": True}, headers=CSRF).status_code == 404
+
+    # Ada is an admin at once, with no new sign-in, and can take it away from Grace but
+    # not from herself or from an address the settings name.
+    login("ada@example.com")
+    people = {u["email"]: u for u in client.get("/api/admin/users").json()}
+    grace, boss = people["grace@example.com"]["user_id"], people["boss@example.com"]["user_id"]
+    client.patch(f"/api/admin/users/{grace}", json={"is_admin": True}, headers=CSRF)
+    revoked = client.patch(f"/api/admin/users/{grace}", json={"is_admin": False}, headers=CSRF)
+    assert revoked.json()["is_admin"] is False
+    own = client.patch(f"/api/admin/users/{ada}", json={"is_admin": False}, headers=CSRF)
+    assert own.status_code == 409 and "your own" in own.json()["detail"]
+    listed = client.patch(f"/api/admin/users/{boss}", json={"is_admin": False}, headers=CSRF)
+    assert listed.status_code == 409 and "ADMIN_EMAILS" in listed.json()["detail"]
+
+    login("grace@example.com")
+    assert client.get("/api/admin/users").status_code == 403
+    # Signing in again does not undo a grant made on the screen.
+    login("ada@example.com")
+    assert client.get("/api/me").json()["is_admin"] is True

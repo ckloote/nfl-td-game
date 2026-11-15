@@ -144,7 +144,7 @@ All under `/api`, JSON, session cookie. Writes require the CSRF header.
 | `GET /standings` | entrant | Rank, total, weekly totals, provisional flag |
 | `GET /entries/{id}` | entrant | One entrant's season grid and used players (locked picks only) |
 | `GET /export/week/{w}.csv` | entrant | `week,entrant,QB,RB,FLEX`, the layout the selector's `pool report import` already reads. Locked picks only, so it is a complete report once the week has locked |
-| `/admin/*` | admin | Approve, remove, restore or rename entries; show and replace the invite link; set or clear a pick on someone's behalf; refresh now; feed status |
+| `/admin/*` | admin | Approve, remove, restore or rename entries; grant or revoke admin; show and replace the invite link; set or clear a pick on someone's behalf; refresh now; feed status |
 
 Two rules are enforced in the server, never only in the UI:
 

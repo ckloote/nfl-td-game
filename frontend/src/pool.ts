@@ -259,6 +259,32 @@ export function useRefreshFeeds() {
   });
 }
 
+export type AdminUser = {
+  user_id: number;
+  email: string | null;
+  name: string | null;
+  is_admin: boolean;
+  is_me: boolean;
+  from_settings: boolean; // listed in ADMIN_EMAILS, so not revocable from the screen
+};
+
+export function useAdminUsers() {
+  return useQuery({ queryKey: ["admin", "users"], queryFn: () => request<AdminUser[]>("/api/admin/users") });
+}
+
+export function useSetAdmin() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, isAdmin }: { userId: number; isAdmin: boolean }) =>
+      request<AdminUser>(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_admin: isAdmin }),
+      }),
+    onSettled: () => client.invalidateQueries({ queryKey: ["admin", "users"] }),
+  });
+}
+
 export type Backup = {
   enabled: boolean;
   keep_days: number;
