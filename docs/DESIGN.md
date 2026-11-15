@@ -28,7 +28,7 @@ Decisions already made with you:
 | 4 | Most TDs wins; ties at the top split | Competition ranks (1, 2, 2, 4) |
 | 5 | Each pick locks 1 hour before that player's kickoff, independently | Checked on the server at every write |
 | 6 | Weekly report of all picks and totals | Replaced by the standings and week pages |
-| 7 | A player in the wrong slot scores zero and is spent | Cannot happen: only eligible players are offered, and the organizer's override enforces position too. Recording a deliberately misplaced pick is not built |
+| 7 | A player in the wrong slot scores zero and is spent | Cannot happen: only eligible players are offered, and the organizer's override enforces position too. Misplaced picks are deliberately not supported, to keep the app simple. The one in the 2026 reports (week 6) is handled by the replay alone, which scores it zero |
 
 Derived behaviour:
 

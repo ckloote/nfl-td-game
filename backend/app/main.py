@@ -7,8 +7,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
+from . import backup
 from .auth import router as auth_router
-from .config import DEV_SESSION_SECRET, settings
+from .config import production_problem, settings
 from .db import upgrade_db
 from .ingest import refresh_loop
 from .membership import admin as membership_admin_router
@@ -19,17 +20,19 @@ from .pool import admin as admin_router
 from .pool import router as pool_router
 from .standings import router as standings_router
 
-if settings.cookie_secure and settings.session_secret == DEV_SESSION_SECRET:
-    raise RuntimeError("Set a real SESSION_SECRET when COOKIE_SECURE is enabled.")
+if problem := production_problem(settings):
+    raise RuntimeError(problem)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     upgrade_db()
     refresher = asyncio.create_task(refresh_loop()) if settings.refresh_enabled else None
+    backups = asyncio.create_task(backup.backup_loop()) if backup.enabled() else None
     yield
-    if refresher:
-        refresher.cancel()
+    for task in (refresher, backups):
+        if task:
+            task.cancel()
 
 
 app = FastAPI(title="NFL TD pool", lifespan=lifespan)
@@ -50,6 +53,7 @@ app.include_router(membership_router)
 app.include_router(membership_admin_router)
 app.include_router(picks_admin_router)
 app.include_router(admin_router)
+app.include_router(backup.admin)
 
 
 @app.get("/api/healthz")

@@ -73,6 +73,11 @@ def standings(
     me: Entry = Depends(current_entry),
 ):
     """Everyone ranked by touchdowns so far. Ties share a rank (1, 2, 2, 4)."""
+    return compute_standings(db, now, me)
+
+
+def compute_standings(db: Session, now: datetime, me: Entry | None = None) -> StandingsOut:
+    """The standings as of `now`; `me` only decides which row is flagged as the viewer's."""
     board = scoring.load_board(db, settings.season)
     entries = approved_entries(db)
     picks = picks_by_entry(db, entries)
@@ -91,8 +96,8 @@ def standings(
                 weeks[pick.week] = weeks.get(pick.week, 0) + tds
         rows.append(
             StandingOut(
-                entry_id=entry.id, name=entry.display_name, is_me=entry.id == me.id, rank=0,
-                total=sum(weeks.values()), weeks=weeks, pending=pending, used=used,
+                entry_id=entry.id, name=entry.display_name, is_me=me is not None and entry.id == me.id,
+                rank=0, total=sum(weeks.values()), weeks=weeks, pending=pending, used=used,
             )
         )
     rows.sort(key=lambda r: (-r.total, r.name.lower(), r.entry_id))

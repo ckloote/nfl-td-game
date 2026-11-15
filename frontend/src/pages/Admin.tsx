@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   formatWhen,
   useAdminEntries,
+  useBackup,
+  useBackupNow,
   useFeeds,
   useInvite,
   usePatchEntry,
@@ -221,6 +223,47 @@ function Feeds() {
   );
 }
 
+function Backups() {
+  const backup = useBackup();
+  const run = useBackupNow();
+  const data = backup.data;
+  const error = backup.error ?? run.error;
+
+  return (
+    <section className={card}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-semibold text-slate-900">Backups</h2>
+        {data?.enabled && (
+          <button className={button} disabled={run.isPending} onClick={() => run.mutate()}>
+            {run.isPending ? "Backing up…" : "Back up now"}
+          </button>
+        )}
+      </div>
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error.message}</p>}
+      {data && !data.enabled && (
+        <p className="mt-2 text-sm text-amber-800">
+          Off. Nothing is being copied off this server; set the BACKUP_S3 settings to turn backups on.
+        </p>
+      )}
+      {data?.enabled && (
+        <div className="mt-2 text-sm">
+          <p className="text-slate-500">
+            {data.ok_at
+              ? `Last backup ${formatWhen(data.ok_at)} (${Math.max(1, Math.round((data.size ?? 0) / 1024))} KB). `
+              : "No backup yet. "}
+            Taken daily and kept for {data.keep_days} days.
+          </p>
+          {data.error && data.attempted_at && (
+            <p className="text-red-700">
+              Last attempt {formatWhen(data.attempted_at)} failed: {data.error}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Admin() {
   return (
     <div className="space-y-4">
@@ -229,6 +272,7 @@ export default function Admin() {
       <Invite />
       <EditPicks />
       <Feeds />
+      <Backups />
     </div>
   );
 }

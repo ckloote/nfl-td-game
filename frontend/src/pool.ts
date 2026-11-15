@@ -259,6 +259,27 @@ export function useRefreshFeeds() {
   });
 }
 
+export type Backup = {
+  enabled: boolean;
+  keep_days: number;
+  attempted_at: string | null;
+  ok_at: string | null;
+  size: number | null; // bytes uploaded by the last success
+  error: string | null;
+};
+
+export function useBackup() {
+  return useQuery({ queryKey: ["admin", "backup"], queryFn: () => request<Backup>("/api/admin/backup") });
+}
+
+export function useBackupNow() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<Backup>("/api/admin/backup", { method: "POST" }),
+    onSuccess: (backup) => client.setQueryData(["admin", "backup"], backup),
+  });
+}
+
 const WHEN = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
   month: "short",

@@ -74,3 +74,15 @@ def test_clock_is_utc_and_can_be_frozen(monkeypatch):
     assert clock.now().tzinfo is not None
     monkeypatch.setattr(settings, "dev_now", "2026-09-17T20:00:00")
     assert clock.now() == datetime(2026, 9, 17, 20, 0, tzinfo=timezone.utc)
+
+
+def test_a_real_deployment_refuses_the_dev_secret_and_a_frozen_clock():
+    from app.config import Settings, production_problem
+
+    def problem(**values):
+        return production_problem(Settings(_env_file=None, **values))
+
+    assert problem(cookie_secure=False, dev_now="2026-09-17T20:00:00") is None  # development
+    assert "SESSION_SECRET" in problem(cookie_secure=True)
+    assert "DEV_NOW" in problem(cookie_secure=True, session_secret="x" * 32, dev_now="2026-09-17T20:00:00")
+    assert problem(cookie_secure=True, session_secret="x" * 32) is None
